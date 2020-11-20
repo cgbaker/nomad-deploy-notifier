@@ -47,7 +47,6 @@ func realMain(args []string) int {
 		panic(err)
 	}
 
-
 	http.HandleFunc("/", actionHandler(slackBot))
 	fmt.Println("[INFO] Server listening")
 	go http.ListenAndServe(":80", nil)

@@ -51,6 +51,10 @@ func (s *Stream) Subscribe(ctx context.Context, slack *bot.Bot) {
 				continue
 			}
 
+			// HACK: unfortunately, initial insertion of job will create two events in the stream
+			// one for the insertion into job_versions, one for the insertion into jobs
+			// de-dupe these here
+			jobs := map[string]*api.Job{}
 			for _, e := range event.Events {
 				if e.Type != "JobRegistered" {
 					s.L.Info("skipping message", "type", e.Type)
@@ -62,17 +66,24 @@ func (s *Stream) Subscribe(ctx context.Context, slack *bot.Bot) {
 					continue
 				}
 				if job == nil {
+					s.L.Error("job was nil")
+					continue
+				}
+				if job.Version == nil || *job.Version != 1000 {
+					s.L.Info("not pending job", "job", *job.ID, "job", *job.Version)
 					continue
 				}
 				if len(job.Approvers) == 0 {
-					s.L.Error("job did not need approval", "job", *job.ID)
+					s.L.Info("job did not need approval", "job", *job.ID)
 					continue
 				}
 				if job.Approvers[0] != s.approverID {
-					s.L.Error("not next approver", "job", *job.ID, "next_approver", job.Approvers[0])
+					s.L.Info("not next approver", "job", *job.ID, "next_approver", job.Approvers[0])
 					continue
 				}
-
+				jobs[*job.ID] = job
+			}
+			for _, job := range jobs {
 				if err = slack.UpsertJobMsg(job); err != nil {
 					s.L.Warn("error from bot", "error", err)
 					return
