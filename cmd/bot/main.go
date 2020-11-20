@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/slack-go/slack"
 
 	"github.com/cgbaker/nomad-deploy-notifier/internal/bot"
 	"github.com/cgbaker/nomad-deploy-notifier/internal/stream"
@@ -28,12 +32,6 @@ func realMain(args []string) int {
 
 	token := os.Getenv("SLACK_TOKEN")
 	toChannel := os.Getenv("SLACK_CHANNEL")
-	if toChannel == "" {
-		toChannel = "nomad-testing"
-	}
-	if token == "" {
-		token = ""
-	}
 
 	slackCfg := bot.Config{
 		ApproverID: approverID,
@@ -49,9 +47,33 @@ func realMain(args []string) int {
 		panic(err)
 	}
 
+
+	http.HandleFunc("/", actionHandler(slackBot))
+	fmt.Println("[INFO] Server listening")
+	go http.ListenAndServe(":80", nil)
+
 	stream.Subscribe(ctx, slackBot)
 
 	return 0
+}
+
+func actionHandler(slackBot *bot.Bot) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload slack.InteractionCallback
+		if err := json.Unmarshal([]byte(r.FormValue("payload")), &payload); err != nil {
+			fmt.Printf("Could not parse action response JSON: %v\n", err)
+			return
+		}
+		msg := slackBot.HandleApproval(&payload)
+		if msg != nil {
+			resp, err := json.Marshal(msg)
+			if err != nil {
+				fmt.Printf("error marshalling json message response: %v\n", err)
+				return
+			}
+			w.Write(resp)
+		}
+	}
 }
 
 func CtxWithInterrupt(ctx context.Context) (context.Context, func()) {

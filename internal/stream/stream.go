@@ -73,7 +73,7 @@ func (s *Stream) Subscribe(ctx context.Context, slack *bot.Bot) {
 					continue
 				}
 
-				if err = slack.UpsertJobMsg(*job); err != nil {
+				if err = slack.UpsertJobMsg(job); err != nil {
 					s.L.Warn("error from bot", "error", err)
 					return
 				}

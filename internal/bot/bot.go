@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/nomad/api"
+	nomadapi "github.com/hashicorp/nomad/api"
 	"github.com/slack-go/slack"
 )
 
@@ -19,11 +19,11 @@ type Config struct {
 }
 
 type Bot struct {
-	mu               sync.Mutex
-	chanID           string
-	api              *slack.Client
-	approvalMessages map[string]string
-	L                hclog.Logger
+	mu        sync.Mutex
+	chanID    string
+	api       *slack.Client
+	approvals map[string]*nomadapi.Job
+	L         hclog.Logger
 }
 
 func NewBot(cfg Config) (*Bot, error) {
@@ -31,64 +31,66 @@ func NewBot(cfg Config) (*Bot, error) {
 		return nil, fmt.Errorf("no token provided")
 	}
 
-	api := slack.New(cfg.Token)
+	api := slack.New(cfg.Token, slack.OptionDebug(true))
 
 	bot := &Bot{
-		api:              api,
-		chanID:           cfg.Channel,
-		approvalMessages: make(map[string]string),
-		L: hclog.Default(),
+		api:       api,
+		chanID:    cfg.Channel,
+		approvals: make(map[string]*nomadapi.Job),
+		L:         hclog.Default(),
 	}
 
 	return bot, nil
 }
 
-func (b *Bot) UpsertJobMsg(job api.Job) error {
+func (b *Bot) HandleApproval(callback *slack.InteractionCallback) *slack.Message {
+	if len(callback.ActionCallback.AttachmentActions) != 1 {
+		b.L.Warn("unexpected action callback")
+		return nil
+	}
+	action := callback.ActionCallback.AttachmentActions[0].Name
+	switch action {
+	case "approve", "deny":
+	default:
+		b.L.Warn("unexpected action value", "value", action)
+		return nil
+	}
+	jobId := callback.CallbackID
+	b.L.Info("received callback", "action", action, "job", jobId)
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	job := b.approvals[jobId]
+	if job == nil {
+		b.L.Warn("received callback for non-existent approval", "job", jobId)
+	}
+	return nil
+}
+
+func (b *Bot) UpsertJobMsg(job *nomadapi.Job) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	return b.initialMsg(job)
-	// ts, ok := b.approvalMessages[*job.ID]
-	// if !ok {
-	// 	return b.initialMsg(job)
-	// }
-	// b.L.Debug("Existing job found, updating status", "slack ts", ts)
-	//
-	// attachments := DefaultAttachments(job)
-	// opts := []slack.MsgOption{slack.MsgOptionAttachments(attachments...)}
-	// opts = append(opts, DefaultMsgOpts()...)
-	//
-	// _, ts, _, err := b.api.UpdateMessage(b.chanID, ts, opts...)
-	// if err != nil {
-	// 	return err
-	// }
-	// b.approvalMessages[*job.ID] = ts
-	//
-	// return nil
 }
 
-func (b *Bot) initialMsg(job api.Job) error {
+func (b *Bot) initialMsg(job *nomadapi.Job) error {
 	attachments := DefaultAttachments(job)
 
 	opts := []slack.MsgOption{slack.MsgOptionAttachments(attachments...)}
-	opts = append(opts, DefaultMsgOpts()...)
+	opts = append(opts)
 
 	b.L.Info("sending message to slack")
-	_, ts, err := b.api.PostMessage(b.chanID, opts...)
+	_, _, err := b.api.PostMessage(b.chanID, opts...)
 	if err != nil {
 		return err
 	}
-	b.approvalMessages[*job.ID] = ts
+	b.approvals[*job.ID] = job
 	return nil
 }
 
-func DefaultMsgOpts() []slack.MsgOption {
-	return []slack.MsgOption{
-		slack.MsgOptionAsUser(true),
-	}
-}
-
-func DefaultAttachments(job api.Job) []slack.Attachment {
+func DefaultAttachments(job *nomadapi.Job) []slack.Attachment {
 	actions := []slack.AttachmentAction{
 		{
 			Name: "approve",
