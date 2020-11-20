@@ -12,16 +12,18 @@ import (
 )
 
 type Config struct {
+	ApproverID string
+	ApproverSecret string
 	Token   string
 	Channel string
 }
 
 type Bot struct {
-	mu      sync.Mutex
-	chanID  string
-	api     *slack.Client
-	deploys map[string]string
-	L       hclog.Logger
+	mu               sync.Mutex
+	chanID           string
+	api              *slack.Client
+	approvalMessages map[string]string
+	L                hclog.Logger
 }
 
 func NewBot(cfg Config) (*Bot, error) {
@@ -32,113 +34,100 @@ func NewBot(cfg Config) (*Bot, error) {
 	api := slack.New(cfg.Token)
 
 	bot := &Bot{
-		api:     api,
-		chanID:  cfg.Channel,
-		deploys: make(map[string]string),
+		api:              api,
+		chanID:           cfg.Channel,
+		approvalMessages: make(map[string]string),
+		L: hclog.Default(),
 	}
 
 	return bot, nil
 }
 
-func (b *Bot) UpsertDeployMsg(deploy api.Deployment) error {
+func (b *Bot) UpsertJobMsg(job api.Job) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	ts, ok := b.deploys[deploy.ID]
-	if !ok {
-		return b.initialDeployMsg(deploy)
-	}
-	b.L.Debug("Existing deployment found, updating status", "slack ts", ts)
-
-	attachments := DefaultAttachments(deploy)
-	opts := []slack.MsgOption{slack.MsgOptionAttachments(attachments...)}
-	opts = append(opts, DefaultDeployMsgOpts()...)
-
-	_, ts, _, err := b.api.UpdateMessage(b.chanID, ts, opts...)
-	if err != nil {
-		return err
-	}
-	b.deploys[deploy.ID] = ts
-
-	return nil
+	return b.initialMsg(job)
+	// ts, ok := b.approvalMessages[*job.ID]
+	// if !ok {
+	// 	return b.initialMsg(job)
+	// }
+	// b.L.Debug("Existing job found, updating status", "slack ts", ts)
+	//
+	// attachments := DefaultAttachments(job)
+	// opts := []slack.MsgOption{slack.MsgOptionAttachments(attachments...)}
+	// opts = append(opts, DefaultMsgOpts()...)
+	//
+	// _, ts, _, err := b.api.UpdateMessage(b.chanID, ts, opts...)
+	// if err != nil {
+	// 	return err
+	// }
+	// b.approvalMessages[*job.ID] = ts
+	//
+	// return nil
 }
 
-func (b *Bot) initialDeployMsg(deploy api.Deployment) error {
-	attachments := DefaultAttachments(deploy)
+func (b *Bot) initialMsg(job api.Job) error {
+	attachments := DefaultAttachments(job)
 
 	opts := []slack.MsgOption{slack.MsgOptionAttachments(attachments...)}
-	opts = append(opts, DefaultDeployMsgOpts()...)
+	opts = append(opts, DefaultMsgOpts()...)
 
+	b.L.Info("sending message to slack")
 	_, ts, err := b.api.PostMessage(b.chanID, opts...)
 	if err != nil {
 		return err
 	}
-	b.deploys[deploy.ID] = ts
+	b.approvalMessages[*job.ID] = ts
 	return nil
 }
 
-func DefaultDeployMsgOpts() []slack.MsgOption {
+func DefaultMsgOpts() []slack.MsgOption {
 	return []slack.MsgOption{
 		slack.MsgOptionAsUser(true),
 	}
 }
 
-func DefaultAttachments(deploy api.Deployment) []slack.Attachment {
-	var actions []slack.AttachmentAction
-	if deploy.StatusDescription == "Deployment is running but requires manual promotion" {
-		actions = []slack.AttachmentAction{
-			{
-				Name: "promote",
-				Text: "Promote :heavy_check_mark:",
-				Type: "button",
+func DefaultAttachments(job api.Job) []slack.Attachment {
+	actions := []slack.AttachmentAction{
+		{
+			Name: "approve",
+			Text: "Approve :heavy_check_mark:",
+			Type: "button",
+		},
+		{
+			Name:  "deny",
+			Text:  "Deny :no_entry_sign:",
+			Style: "danger",
+			Type:  "button",
+			Confirm: &slack.ConfirmationField{
+				Title:       "Are you sure?",
+				Text:        ":cry: :cry: :cry: :cry: :cry:",
+				OkText:      "Fail",
+				DismissText: "Whoops!",
 			},
-			{
-				Name:  "fail",
-				Text:  "Fail :boom:",
-				Style: "danger",
-				Type:  "button",
-				Confirm: &slack.ConfirmationField{
-					Title:       "Are you sure?",
-					Text:        ":nomad-sad: :nomad-sad: :nomad-sad: :nomad-sad: :nomad-sad:",
-					OkText:      "Fail",
-					DismissText: "Woops!",
-				},
-			},
-		}
+		},
 	}
 	var fields []slack.AttachmentField
-	for tgn, tg := range deploy.TaskGroups {
-		field := slack.AttachmentField{
-			Title: fmt.Sprintf("Task Group: %s", tgn),
-			Value: fmt.Sprintf("Healthy: %d, Placed: %d, Desired Canaries: %d", tg.HealthyAllocs, tg.PlacedAllocs, tg.DesiredCanaries),
+	for _, tg := range job.TaskGroups {
+		for _, task := range tg.Tasks {
+			field := slack.AttachmentField{
+				Title: fmt.Sprintf("Task: %s/%s", tg.Name, task.Name),
+				Value: fmt.Sprintf("Driver: %s\n%#v", task.Driver, task.Config),
+			}
+			fields = append(fields, field)
 		}
-		fields = append(fields, field)
 	}
 	return []slack.Attachment{
 		{
-			Fallback:   "deployment update",
-			Color:      colorForStatus(deploy.Status),
-			AuthorName: fmt.Sprintf("%s deployment update", deploy.JobID),
-			AuthorLink: fmt.Sprintf("http://127.0.0.1:4646/ui/jobs/%s/deployments", deploy.JobID),
-			Title:      deploy.StatusDescription,
-			TitleLink:  fmt.Sprintf("http://127.0.0.1:4646/ui/jobs/%s/deployments", deploy.JobID),
+			Fallback:   "job registration",
+			Title:      "Job Registration Approval",
 			Fields:     fields,
-			Footer:     fmt.Sprintf("Deploy ID: %s", deploy.ID),
+			Footer:     fmt.Sprintf("Job ID: %s", job.ID),
 			Ts:         json.Number(fmt.Sprintf("%d", time.Now().Unix())),
 			Actions:    actions,
+			CallbackID: *job.ID,
 		},
 	}
 }
 
-func colorForStatus(status string) string {
-	switch status {
-	case "failed":
-		return "#dd4e58"
-	case "running":
-		return "#1daeff"
-	case "successful":
-		return "#36a64f"
-	default:
-		return "#D3D3D3"
-	}
-}

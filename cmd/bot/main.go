@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/drewbailey/nomad-deploy-notifier/internal/bot"
-	"github.com/drewbailey/nomad-deploy-notifier/internal/stream"
+	"github.com/cgbaker/nomad-deploy-notifier/internal/bot"
+	"github.com/cgbaker/nomad-deploy-notifier/internal/stream"
 )
 
 func main() {
@@ -18,15 +19,30 @@ func realMain(args []string) int {
 	ctx, closer := CtxWithInterrupt(context.Background())
 	defer closer()
 
+	approverID := os.Getenv("NOMAD_APPROVER_ID")
+	approverSecret := os.Getenv("NOMAD_APPROVER_SECRET")
+	if approverSecret == "" {
+		fmt.Println("must have approver secret")
+		os.Exit(1)
+	}
+
 	token := os.Getenv("SLACK_TOKEN")
 	toChannel := os.Getenv("SLACK_CHANNEL")
+	if toChannel == "" {
+		toChannel = "nomad-testing"
+	}
+	if token == "" {
+		token = ""
+	}
 
 	slackCfg := bot.Config{
+		ApproverID: approverID,
+		ApproverSecret: approverSecret,
 		Token:   token,
 		Channel: toChannel,
 	}
 
-	stream := stream.NewStream(stream.Config{})
+	stream := stream.NewStream(approverID)
 
 	slackBot, err := bot.NewBot(slackCfg)
 	if err != nil {
