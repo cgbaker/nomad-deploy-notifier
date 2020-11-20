@@ -8,4 +8,4 @@ require (
 	github.com/slack-go/slack v0.7.2
 )
 
-replace github.com/hashicorp/nomad/api => github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120110713-e4f0f01000fe
+replace github.com/hashicorp/nomad/api => github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120155732-97f5071539bc

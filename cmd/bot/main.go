@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/hashicorp/nomad/api"
 	"github.com/slack-go/slack"
 
 	"github.com/cgbaker/nomad-deploy-notifier/internal/bot"
@@ -34,15 +35,18 @@ func realMain(args []string) int {
 	toChannel := os.Getenv("SLACK_CHANNEL")
 
 	slackCfg := bot.Config{
-		ApproverID: approverID,
 		ApproverSecret: approverSecret,
 		Token:   token,
 		Channel: toChannel,
 	}
 
-	stream := stream.NewStream(approverID)
+	nomadClient, err := api.NewClient(&api.Config{})
+	if err != nil {
+		panic(err)
+	}
+	stream := stream.NewStream(approverID, nomadClient)
 
-	slackBot, err := bot.NewBot(slackCfg)
+	slackBot, err := bot.NewBot(slackCfg, nomadClient)
 	if err != nil {
 		panic(err)
 	}
@@ -63,15 +67,7 @@ func actionHandler(slackBot *bot.Bot) func(http.ResponseWriter, *http.Request) {
 			fmt.Printf("Could not parse action response JSON: %v\n", err)
 			return
 		}
-		msg := slackBot.HandleApproval(&payload)
-		if msg != nil {
-			resp, err := json.Marshal(msg)
-			if err != nil {
-				fmt.Printf("error marshalling json message response: %v\n", err)
-				return
-			}
-			w.Write(resp)
-		}
+		slackBot.HandleApproval(&payload)
 	}
 }
 

@@ -18,8 +18,10 @@ github.com/hashicorp/go-hclog v0.14.1 h1:nQcJDQwIAGnmoUWp8ubocEX40cCml/17YkF6csQ
 github.com/hashicorp/go-hclog v0.14.1/go.mod h1:whpDNt7SSdeAju8AWKIWsul05p54N/39EeqMAyrmvFQ=
 github.com/hashicorp/go-rootcerts v1.0.2 h1:jzhAVGtqPKbwpyCPELlgNWhE1znq+qwJtW5Oi2viEzc=
 github.com/hashicorp/go-rootcerts v1.0.2/go.mod h1:pqUvnprVnM5bf7AOirdbb01K4ccR319Vf4pU3K5EGc8=
-github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120110713-e4f0f01000fe h1:QUxK5ZNv+Zjpm5yJ6w9rJPPiyF7cLR8BpPLc8CcOLf4=
-github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120110713-e4f0f01000fe/go.mod h1:vYHP9jMXk4/T2qNUbWlQ1OHCA1hHLil3nvqSmz8mtgc=
+github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120155439-233aa4806ac1 h1:s+cSnK0eUQySsXsecjQ6MER6DEf1GdJL0FwoyOyfqzg=
+github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120155439-233aa4806ac1/go.mod h1:vYHP9jMXk4/T2qNUbWlQ1OHCA1hHLil3nvqSmz8mtgc=
+github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120155732-97f5071539bc h1:Q4VgOW1Wn8J0dWy/QLrG2Gb8Jt9wtsAHpbFSB/Aqhh4=
+github.com/hashicorp/nomad-enterprise/api v0.0.0-20201120155732-97f5071539bc/go.mod h1:vYHP9jMXk4/T2qNUbWlQ1OHCA1hHLil3nvqSmz8mtgc=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
